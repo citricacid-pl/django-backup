@@ -226,7 +226,7 @@ class Command(BaseCommand):
             print 'Doing Mysql backup to database %s into %s' % (self.db, outfile)
             self.do_mysql_backup(outfile)
         # TODO reinstate postgres support
-        elif self.engine == 'django.db.backends.postgresql_psycopg2':
+        elif self.engine in ['django.db.backends.postgresql_psycopg2','django.contrib.gis.db.backends.postgis']:
             print 'Doing Postgresql backup to database %s into %s' % (self.db, outfile)
             self.do_postgresql_backup(outfile)
         else:
