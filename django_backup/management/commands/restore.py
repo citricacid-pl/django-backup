@@ -45,44 +45,58 @@ class Command(BaseCommand):
         self.ftp_username = settings.BACKUP_FTP_USERNAME
         self.ftp_password = settings.BACKUP_FTP_PASSWORD
         self.restore_media = options.get('media')
+        self.tempdir = gettempdir()
 
-        print 'Connecting to %s...' % self.ftp_server
-        sftp = self.get_connection()
-        print 'Connected.'
-        backups = [i.strip() for i in sftp.execute('ls %s' % (self.remote_dir))]
+        if self.ftp_server:
+            # Remote
+            print 'Connecting to %s...' % self.ftp_server
+            sftp = self.get_connection()
+            print 'Connected.'
+            backups = [i.strip() for i in sftp.execute('ls %s' % (self.remote_dir))]
+        else:
+            backups = os.listdir(self.backup_dir)
+
         db_backups = filter(is_db_backup, backups)
         db_backups.sort()
+        db_remote = db_backups[-1]
+
         if self.restore_media:
             media_backups = filter(is_media_backup, backups)
             media_backups.sort()
-
-        self.tempdir = gettempdir()
-
-        db_remote = db_backups[-1]
-        if self.restore_media:
             media_remote = media_backups[-1]
 
-        db_local = os.path.join(self.tempdir, db_remote)
-        print 'Fetching database %s...' % db_remote
-        sftp.get(os.path.join(self.remote_dir, db_remote), db_local)
+        if self.ftp_server:
+            print 'Fetching database %s...' % db_remote
+            db_local = os.path.join(self.tempdir, db_remote)
+            sftp.get(os.path.join(self.remote_dir, db_remote), db_local)
+        else:
+            db_local = os.path.join(self.backup_dir, db_remote)
+
         print 'Uncompressing database...'
         uncompressed = self.uncompress(db_local)
         if uncompressed is 0:
             sql_local = db_local[:-3]
         else:
             sql_local = db_local
+
         if self.restore_media:
-            print 'Fetching media %s...' % media_remote
-            media_local = os.path.join(self.tempdir, media_remote)
-            sftp.get(os.path.join(self.remote_dir, media_remote), media_local)
+            if self.ftp_server:
+                # Remote
+                print 'Fetching media %s...' % media_remote
+                media_local = os.path.join(self.tempdir, media_remote)
+                sftp.get(os.path.join(self.remote_dir, media_remote), media_local)
+            else:
+                # Local
+                media_local = os.path.join(self.backup_dir, media_remote)
             print 'Uncompressing media...'
             self.uncompress_media(media_local)
+
         # Doing restore
         if self.engine == 'django.db.backends.mysql':
             print 'Doing Mysql restore to database %s from %s...' % (self.db, sql_local)
             self.mysql_restore(sql_local)
         # TODO reinstate postgres support
-        elif self.engine == 'django.db.backends.postgresql_psycopg2':
+        elif self.engine in ['django.db.backends.postgresql_psycopg2','django.contrib.gis.db.backends.postgis']:
             print 'Doing Postgresql restore to database %s from %s...' % (self.db, sql_local)
             self.posgresql_restore(sql_local)
         else:
@@ -120,18 +134,21 @@ class Command(BaseCommand):
         os.system(cmd)
 
     def posgresql_restore(self, infile):
-        args = ['psql']
+        args = ['pg_restore']
         if self.user:
-            args.append("-U %s" % self.user)
+            args.append("--username=%s" % self.user)
+        if self.host:
+            args.append("--host='%s'" % self.host)
+        if self.port:
+            args.append("--port=%s" % self.port)
         if self.passwd:
             os.environ['PGPASSWORD'] = self.passwd
-        if self.host:
-            args.append("-h %s" % self.host)
-        if self.port:
-            args.append("-p %s" % self.port)
-        args.append('-f %s' % infile)
-        args.append("-o %s" % os.path.join(self.tempdir, 'dump.log'))
-        args.append(self.db)
+        args.append('-d %s' % self.db)
+        args.append('--clean')
+        args.append('--format=%s' % 'custom')
+        args.append(infile)
+        # args.append('-f %s' % infile)
+        # args.append("-o %s" % os.path.join(self.tempdir, 'dump.log'))
         cmd = ' '.join(args)
         print '\t', cmd
         os.system(cmd)

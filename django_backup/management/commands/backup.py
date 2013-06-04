@@ -219,7 +219,7 @@ class Command(BaseCommand):
         if not os.path.exists(self.backup_dir):
             os.makedirs(self.backup_dir)
 
-        outfile = os.path.join(self.backup_dir, 'backup_%s.sql' % self.time_suffix)
+        outfile = os.path.join(self.backup_dir, 'backup_%s.db' % self.time_suffix)
 
         # Doing backup
         if self.engine == 'django.db.backends.mysql':
@@ -358,11 +358,12 @@ class Command(BaseCommand):
             args += ["--port=%s" % self.port]
         if self.db:
             args += [self.db]
+        args += ["--format=custom", "--clean"]
         pgdump_path = getattr(settings, 'BACKUP_PG_DUMP_PATH', 'pg_dump')
 
         if self.passwd:
             os.environ['PGPASSWORD'] = self.passwd
-        pgdump_cmd = '%s %s --clean > %s' % (pgdump_path, ' '.join(args), outfile)
+        pgdump_cmd = '%s %s > %s' % (pgdump_path, ' '.join(args), outfile)
         print pgdump_cmd
         os.system(pgdump_cmd)
 
