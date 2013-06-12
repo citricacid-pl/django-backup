@@ -1,5 +1,6 @@
 import calendar
 import os
+import subprocess
 import time
 from datetime import datetime
 from datetime import timedelta
@@ -15,6 +16,12 @@ import pysftp as ssh
 TIME_FORMAT = '%Y%m%d-%H%M%S'
 regex = re.compile(r'(\d){8}-(\d){6}')
 GOOD_RSYNC_FLAG = '__good_backup'
+
+
+def call(*args, **kwargs):
+    return_code = subprocess.call(*args, **kwargs)
+    if not return_code == 0:
+        raise Exception('Process ended with non-zero value: %d' % return_code)
 
 
 def is_db_backup(filename):
@@ -271,7 +278,7 @@ class Command(BaseCommand):
         command = 'cd %s && tar -czf %s *' % (directory, outfile)
         print '=' * 70
         print 'Running Command: %s' % command
-        os.system(command)
+        call(command, shell=True)
 
     def get_connection(self):
         '''
@@ -306,7 +313,7 @@ class Command(BaseCommand):
                 command = 'rm -r %s' % remove_all
                 print '=' * 70
                 print 'Running Command: %s' % command
-                os.system(command)
+                call(command, shell=True)
             # remote(ftp server)
         elif self.no_local:
             to_remove = local_files
@@ -319,7 +326,7 @@ class Command(BaseCommand):
                 command = 'rm -r %s' % remove_all
                 print '=' * 70
                 print 'Running Command: %s' % command
-                os.system(command)
+                call(command, shell=True)
 
     def sendmail(self, address_from, addresses_to, attachments):
         subject = "Your DB-backup for " + datetime.now().strftime("%d %b %Y")
@@ -332,8 +339,8 @@ class Command(BaseCommand):
         email.send()
 
     def do_compress(self, infile, outfile):
-        os.system('gzip --stdout %s > %s' % (infile, outfile))
-        os.system('rm %s' % infile)
+        call('gzip --stdout %s > %s' % (infile, outfile), shell=True)
+        call('rm %s' % infile, shell=True)
 
     def do_mysql_backup(self, outfile):
         args = []
@@ -346,7 +353,7 @@ class Command(BaseCommand):
         if self.port:
             args += ["--port=%s" % self.port]
         args += [self.db]
-        os.system('%s %s > %s' % (getattr(settings, 'BACKUP_SQLDUMP_PATH', 'mysqldump'), ' '.join(args), outfile))
+        call('%s %s > %s' % (getattr(settings, 'BACKUP_SQLDUMP_PATH', 'mysqldump'), ' '.join(args), outfile), shell=True)
 
     def do_postgresql_backup(self, outfile):
         args = []
@@ -365,7 +372,7 @@ class Command(BaseCommand):
             os.environ['PGPASSWORD'] = self.passwd
         pgdump_cmd = '%s %s > %s' % (pgdump_path, ' '.join(args), outfile)
         print pgdump_cmd
-        os.system(pgdump_cmd)
+        call(pgdump_cmd, shell=True)
 
     def clean_local_surplus_db(self):
         try:
@@ -384,7 +391,7 @@ class Command(BaseCommand):
                 command = 'rm %s' % remove_all
                 print '=' * 70
                 print 'Running Command: %s' % command
-                os.system(command)
+                call(command, shell=True)
         except ImportError:
             print 'cleaned nothing, because BACKUP_DATABASE_COPIES is missing'
 
@@ -437,7 +444,7 @@ class Command(BaseCommand):
                 command = 'rm -r %s' % remove_all
                 print '=' * 70
                 print 'Running Command: %s' % command
-                os.system(command)
+                call(command, shell=True)
         except ImportError:
             print 'cleaned nothing, because BACKUP_MEDIA_COPIES is missing'
 
@@ -481,7 +488,7 @@ class Command(BaseCommand):
             local_link_cmd = 'rm -f %(local_current_backup)s && ln -s %(local_backup_target)s %(local_current_backup)s' % local_info
             cmd = '\n'.join(['%s&&%s' % (local_rsync_cmd, local_mark_cmd), local_link_cmd])
             print cmd
-            os.system(cmd)
+            call(cmd, shell=True)
 
         #remote media rsync backup
         if self.ftp:
@@ -506,7 +513,7 @@ class Command(BaseCommand):
                 sftp.mkdir(self.remote_dir)
             except IOError:
                 pass
-            os.system(cmd)
+            call(cmd, shell=True)
 
     def clean_broken_rsync(self):
         self.clean_local_broken_rsync()
@@ -544,4 +551,4 @@ class Command(BaseCommand):
             commands.append(cmd)
         full_cmd = '\n'.join(commands)
         print full_cmd
-        os.system(full_cmd)
+        call(full_cmd, shell=True)
